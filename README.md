@@ -1,38 +1,37 @@
 # The Prompt Layer
 
-Two tools that do the same job. One is a playground: pick a model, paste in
-whatever you have, get an answer. The other is an assistant: ask for an outcome
-and a *capability* handles it.
+Two tools that do the same job. One's a playground, where you pick a model,
+paste in whatever you have and get an answer. The other's an assistant, where you
+ask for an outcome and a *capability* handles it.
 
-Both talk to the same gateway, the same model, the same key. Run them side by
-side and the difference is not in the answers. It is in what each one leaves
-behind.
+Both go through the same gateway, with the same model and the same key. Run them
+side by side and the answers look much the same. What each one leaves behind
+doesn't.
 
 ## What it shows
 
 | Step | What happens | Result |
 |---|---|---|
-| **Playground** | Attach a diff and a file of deploy variables, ask for a review, then ask it to quote a secret from that file | It quotes the key back to you. Nothing decided it should not |
-| **Assistant** | Same prompt, same two files, then the same question about the secrets file | A real review, then `I don't have that in what was attached.` The file never reached the model |
+| **Playground** | Attach a diff and a file of deploy variables, ask for a review, then ask it to quote a secret from that file | It quotes the key back to you, because nothing decided it shouldn't |
+| **Assistant** | Same prompt, same two files, then the same question about the secrets file | A real review, then `I don't have that in what was attached.` because the file never reached the model |
 | **The gateway** | Compare the two rows in the gateway's log | Same key, same model, similar tokens. Nothing in them says which request was governed |
 | **The trace** | Open the assistant's trace | `capability.owner`, `context.dropped`, `budget.action`, `policy.decision`, on one span tree |
 | **Asking it to act** | Ask the assistant to fix the bug *and stop traffic to checkout* | Refused at the boundary, with a reference that links to the trace. Refused again at the cluster if the layer is bypassed |
-| **The gap** | Ask for something nobody has defined, like `deploy this to prod` | No capability covers it. That is the honest state of most of this work |
+| **The gap** | Ask for something nobody has defined, like `deploy this to prod` | No capability covers it yet, which is true of most of this work |
 
 ## The idea
 
 Most teams already have the tooling. An AI gateway gives you virtual keys,
-budgets, model aliases, redaction, tool permissions and request logs. It is good,
-and this does not replace it: every call here goes through a gateway.
+budgets, model aliases, redaction, tool permissions and request logs, and it's
+good. This repo doesn't replace it - every call here goes through one.
 
-But a gateway's units are **keys** and **models**. It can tell you a call
-happened, what it cost and which key made it. It cannot tell you what the call
-was *for*, who decided that this is how your company reviews code, whether a file
-should have been sent, or whether an action should have been allowed.
+A gateway thinks in keys and models, though. It can tell you a call happened, what
+it cost and which key made it. What it can't tell you is what the call was *for*,
+who decided this is how your company reviews code, whether a file should have been
+sent, or whether an action should have been allowed.
 
-Those are not features it is missing. They are decisions nobody has made, and a
-gateway cannot make them for you. It will run perfectly with an empty list of
-approved uses, forever, and never mention it.
+Nobody has made those decisions, and a gateway can't make them for you. It'll run
+happily with an empty list of approved uses, forever, and never mention it.
 
 A **capability** is where one of those decisions lives:
 
@@ -44,18 +43,19 @@ context: templates/code-review.md
 evals: evals/code-review/
 ```
 
-Five lines, and the important one is `owner`. Somebody is accountable for which
-model reviews your code, what may be sent with it, what it costs and what it is
-allowed to do. A developer asks for `code-review`. They never pick a model.
+Five lines, and the one that matters is `owner`: somebody is accountable for which
+model reviews your code, what may be sent with it, what it costs and what it's
+allowed to do. A developer asks for `code-review` and never picks a model.
 
 ### Why this one is different
 
-Every other capability a platform offers converges on a state you declared. Apply
-the same spec twice, get the same database. This one does not: same prompt,
-twice, different answer. That is not a bug, it is what the thing is.
+Every other capability a platform offers converges on a state you declared, so
+the same spec applied twice gets you the same database. This one doesn't. Send the
+same prompt twice and you'll get two different answers, and nobody's going to fix
+that, because it's how these models work.
 
-So you cannot govern it by declaring desired state. You govern it by constraining
-the boundary and recording the crossing.
+So you can't govern it by declaring desired state. You govern it by constraining
+the boundary and recording what crosses it.
 
 ## How it works
 
@@ -67,18 +67,16 @@ the boundary and recording the crossing.
 | 4 | Agent permissions | what it may **do** | `policy/*.yaml`, `layer/permissions.py` |
 | 5 | Observability | what **crossed**, recorded | `layer/record.py` |
 
-One file per component, on purpose.
+Each component lives in its own file, so you can read one without the others.
 
 A request can be refused in two places. At the boundary, `policy/tool-call.yaml`
 is a Kyverno `ValidatingPolicy` in JSON mode that checks a tool call before it
 leaves. At the cluster, `policy/admission.yaml` is a `ClusterPolicy` that refuses
-the same write at the Kubernetes API even if the layer is wrong or bypassed.
+the same write at the Kubernetes API, so it still holds if the layer is wrong or
+bypassed.
 
-> The layer refuses what it was told not to ask for.
-> The cluster refuses it anyway if the layer is wrong.
-
-The cluster rule is scoped to the agent's identity, so a human on call can still
-scale things during an incident. The point is governing the agent, not freezing the cluster.
+The cluster rule is scoped to the agent's identity. A human on call can still
+scale things during an incident; it's the agent that gets stopped.
 
 ## What's in this repo
 
@@ -134,22 +132,22 @@ provider:
   api_key: "..."
 ```
 
-That works with OpenAI, OpenRouter, LiteLLM, Ollama, llama.cpp or vLLM, anything
-speaking the OpenAI chat completions shape. `config.yaml` is gitignored. To keep
-the key out of files entirely, use `api_key_env: MY_VAR` instead.
+That works with OpenAI, OpenRouter, LiteLLM, Ollama, llama.cpp, vLLM or anything
+else that speaks the OpenAI chat completions shape. `config.yaml` is gitignored,
+and if you'd rather keep the key out of files entirely, use `api_key_env: MY_VAR`.
 
 The capabilities ship asking for `model: qwen3.8-27b`, which is what this was
-built against. If your backend does not serve that, map it in `config.yaml`
-rather than editing the capability files:
+built against. If your backend doesn't serve that, map it in `config.yaml`
+instead of editing the capability files:
 
 ```yaml
 models:
   qwen3.8-27b: "gpt-4o-mini"        # or anthropic/claude-sonnet-4.5, llama3.1:8b, ...
 ```
 
-That is the indirection the whole repo is about, so it is worth using rather
-than editing four capability files by hand. A developer never sees either side
-of it.
+That one line of indirection is what the whole repo is about, so use it rather
+than editing four capability files by hand. A developer never sees either side of
+it.
 
 Leave `config.yaml` out and everything still runs against canned responses in
 `fixtures/`, which is enough to watch every component work.
@@ -160,7 +158,7 @@ Leave `config.yaml` out and everything still runs against canned responses in
 ./setup.sh
 ```
 
-Safe to re-run. It ends with `ready`, or tells you exactly what broke.
+It's safe to re-run, and it ends with `ready` or tells you exactly what broke.
 
 ### 3. Use it
 
@@ -211,16 +209,16 @@ cases a file cannot cover:
 
 ## Troubleshooting
 
-**`capability verify` fails.** It names the check that failed. Start there. It
-covers the capability files, the allowlist, budgets, both policy modes and the
+**`capability verify` fails.** It names the check that failed, so start there.
+It covers the capability files, the allowlist, budgets, both policy modes and the
 spans. Fourteen checks run anywhere; four more need a cluster with Kyverno and
-are reported as `SKIP` without one.
+show as `SKIP` without one.
 
-**`the kyverno CLI is not on PATH`.** Component 4 shells out to it. Install it,
-or the boundary check cannot run.
+**`the kyverno CLI is not on PATH`.** Component 4 shells out to it, so the
+boundary check can't run until it's installed.
 
-**Every answer looks canned.** `config.yaml` is missing or `base_url` is empty.
-That is the intended fallback, not a failure.
+**Every answer looks canned.** `config.yaml` is missing or `base_url` is empty,
+and the canned responses are the fallback for exactly that case.
 
 **Answers are slow, or come back empty.** Reasoning models spend the token budget
 thinking before they answer. Set `provider.thinking: false` in `config.yaml` to
@@ -236,26 +234,26 @@ not running. `capability reset` restarts Jaeger to clear old traces, so reload t
 page afterwards. It stays empty until the next request.
 
 **The admission policy refuses nothing.** Check Kyverno is installed
-(`kubectl get crd clusterpolicies.kyverno.io`) and that you are acting as the
-agent's service account. A `Forbidden` error means RBAC stopped it and the policy
-never ran, which is a different thing. `verify` tells them apart.
+(`kubectl get crd clusterpolicies.kyverno.io`) and that you're acting as the
+agent's service account. A `Forbidden` error means RBAC stopped the request before
+the policy ever ran, and `verify` tells the two apart.
 
 **A capability edit does nothing.** Restart the web tools: the catalogue is
 read at request time but the page is not.
 
-**`before/review.sh` does not scale anything.** On purpose. Its last act is a
-`kubectl scale` with no decision behind it, which is the point being made, so
-it prints the command and stops. `RUN_IT=yes` runs it for real, against
-whichever cluster your kubeconfig points at.
+**`before/review.sh` doesn't scale anything.** Its last step is a `kubectl
+scale` with no decision behind it, so it prints the command and stops there.
+`RUN_IT=yes` runs it for real, against whichever cluster your kubeconfig points
+at.
 
 ## Known quirks
 
-Only `code-review` is wired end to end. The other capabilities exist so the
+Only `code-review` is wired end to end; the other capabilities are there so the
 catalogue reads like a catalogue. `evals/` has structure but no suite that gates
-anything. `on_limit: queue` reports the decision without a queue behind it. The
-agent's tool call is chosen by scenario rather than parsed out of the model's
+anything, and `on_limit: queue` reports the decision without a queue behind it.
+The agent's tool call is picked by scenario rather than parsed out of the model's
 reply, because local models emit tool calls inconsistently and this component is
-about the decision, not the parsing.
+about what the policy decides.
 
 Spend is recorded from whatever the backend reports as a cost, and most
 OpenAI-compatible backends report none, so a live run moves the ledger by
@@ -263,8 +261,8 @@ nothing. `capability run code-review --scenario over-budget` forces the
 over-budget branch, and `capability reset` leaves `summarise-incident` sitting
 at its limit, so the decision is reachable without waiting to spend $400.
 
-The two web tools share one conversation each, with no authentication and no
-per-viewer state. They are a demonstration, not a service.
+The two web tools keep one conversation each, with no authentication and no
+per-viewer state, so don't put them anywhere public.
 
 Every `gen_ai.*` attribute is still `Development`. In semantic conventions
 v1.42.0 (June 2026) the GenAI conventions were deprecated in the main repo and
