@@ -1,0 +1,35 @@
+# Component 4: agent permissions, at the boundary.
+#
+# The same policy engine the platform already uses for admission, pointed at
+# a tool-call payload instead of a Kubernetes resource. One engine for every
+# caller: human, CI or agent.
+#
+# Worth knowing: this repo evaluates JSON mode by shelling out to the Kyverno
+# CLI. So this is the boundary
+# constraint, and policy/admission.yaml is the enforcement floor underneath it.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: capability-tool-calls
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+spec:
+  evaluation:
+    mode: JSON
+  validations:
+    # The capability declared which tools it may call. Anything else is denied
+    # before the call ever leaves the layer. The model asking nicely is not
+    # a permission grant.
+    - expression: >-
+        object.tool_call.name in object.capability.tools
+      message: >-
+        denied: this capability may not call that tool. The capability
+        declares the tools it is allowed to use; the model asking for a
+        different one is not a grant.
+
+    # A capability with no owner is not a capability. It is a shortcut
+    # somebody added. This is the whole talk, expressed as a policy rule.
+    - expression: >-
+        has(object.capability.owner) && object.capability.owner != ""
+      message: >-
+        denied: this capability has no owner. Nobody has decided this.

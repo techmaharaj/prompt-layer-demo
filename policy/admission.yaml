@@ -1,0 +1,124 @@
+# Component 4, CLUSTER-SIDE: the floor under the boundary.
+#
+# policy/tool-call.yaml stops a tool call the capability was never allowed to
+# make, before it leaves the layer. This stops it at the API server even if the
+# layer is wrong, bypassed, or someone writes a second layer tomorrow.
+#
+#   The layer refuses what it was told not to ask for.
+#   The cluster refuses it anyway if the layer is wrong.
+#
+# Scoped to the AGENT's identity, not to everybody. A human on call must still
+# be able to scale this to zero during an incident. The point is governing the agent, not
+# freezing the cluster. That distinction is the whole reason `subjects` is here.
+#
+# Checked against request.oldObject, never request.object: oldObject is the
+# state BEFORE this request, so the agent cannot grant itself the approval
+# annotation in the same patch the annotation is supposed to gate.
+#
+# The namespace is spelled out in every rule below and must match
+# cluster.namespace in config.yaml and the Namespace in k8s/demo-prod.yaml.
+# Change it in one place and the policy stops matching, silently, which is the
+# failure mode this file is otherwise about.
+# On Kyverno 1.19 this kind logs a deprecation warning on apply: kyverno.io/v1
+# ClusterPolicy is on its way out in favour of the CEL-based ValidatingPolicy
+# in policies.kyverno.io, which policy/tool-call.yaml already uses. It still
+# enforces. Rewriting it in CEL changes how `subjects` and `operations` are
+# expressed, so it is a migration to do deliberately and re-test per operation,
+# not a find and replace.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: prompt-layer-agent-writes
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+spec:
+  background: false
+  rules:
+    # The object itself: `kubectl patch deploy`, `kubectl edit`, a controller.
+    # Label-selected, so only prod-labelled workloads are gated.
+    - name: agent-may-not-mutate-prod
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment"]
+              namespaces: ["demo-prod"]
+              selector:
+                matchLabels:
+                  env: prod
+              operations: ["UPDATE"]
+            subjects:
+              - kind: ServiceAccount
+                name: capability-agent
+                namespace: demo-prod
+      validate:
+        failureAction: Enforce
+        message: >-
+          denied by admission: an agent may not mutate a prod-labelled workload
+          without a pre-existing 'prompt-layer.io/approved-by' annotation. The
+          boundary should have stopped this; the cluster stopped it anyway.
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.oldObject.metadata.annotations.\"prompt-layer.io/approved-by\" || '' }}"
+                operator: Equals
+                value: ""
+
+    # The scale subresource: `kubectl scale` sends UPDATE to deployments/scale,
+    # whose object is a Scale and carries NONE of the Deployment's labels, so a
+    # matchLabels selector silently never fires here. Found that the hard way on
+    # 2026-11-04: the rule above passed its test while `kubectl scale` sailed
+    # through. This rule therefore gates the subresource by namespace and subject
+    # instead. Deliberately broader: in this namespace the agent may not resize
+    # anything, labelled or not.
+    - name: agent-may-not-scale-in-prod-namespace
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment/scale"]
+              namespaces: ["demo-prod"]
+              operations: ["UPDATE"]
+            subjects:
+              - kind: ServiceAccount
+                name: capability-agent
+                namespace: demo-prod
+      validate:
+        failureAction: Enforce
+        message: >-
+          denied by admission: an agent may not scale a workload in demo-prod.
+          The boundary should have stopped this; the cluster stopped it anyway.
+        deny:
+          conditions:
+            any:
+              - key: "true"
+                operator: Equals
+                value: "true"
+
+    # DELETE needs its own rule, selector-free. On a delete, request.object is
+    # null (only request.oldObject is populated), so a matchLabels selector
+    # never fires, exactly as with the scale subresource above. Verified on
+    # 2026-11-04: with DELETE folded into the rule above, `kubectl delete deploy`
+    # went straight through while patch and scale were correctly refused.
+    # Two selector-blind gaps in one policy is the lesson worth saying out loud:
+    # a policy that is not tested per-operation is a policy you do not have.
+    - name: agent-may-not-delete-in-prod-namespace
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment"]
+              namespaces: ["demo-prod"]
+              operations: ["DELETE"]
+            subjects:
+              - kind: ServiceAccount
+                name: capability-agent
+                namespace: demo-prod
+      validate:
+        failureAction: Enforce
+        message: >-
+          denied by admission: an agent may not delete a workload in demo-prod.
+          The boundary should have stopped this; the cluster stopped it anyway.
+        deny:
+          conditions:
+            any:
+              - key: "true"
+                operator: Equals
+                value: "true"

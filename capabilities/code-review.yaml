@@ -1,0 +1,51 @@
+# The artefact most organisations do not have.
+# The first five lines are the whole idea: a capability has a NAME, an OWNER,
+# and a decision already taken about model, context and evals.
+# A developer asks for `code-review`. They never name a model.
+#
+# `model` is whatever YOUR backend serves. Change this one line and every
+# developer is moved at once, without touching anything they wrote. Compare
+# before/review.sh, where the model name lives in a developer's own script and
+# its retirement breaks their afternoon.
+name: code-review
+owner: platform-team@example.com
+model: qwen3.8-27b
+context: templates/code-review.md
+evals: evals/code-review/
+
+# Component 3: token governors. Per-capability, not per-key: "$400 on
+# code review" is a conversation finance can have; "$400 on a person" isn't.
+budget:
+  limit_usd: 400
+  window: monthly
+  on_limit: queue          # queue, don't deny. Somebody decided that.
+
+# Component 4: agent permissions. What this capability may DO.
+policy: policy/tool-call.yaml
+tools:
+  - post_review_comment
+
+# What a developer might say when they want this. The platform routes on it:
+# the developer asks for an outcome in their own words and never picks a
+# capability from a list. A request matching nothing is the honest answer
+# that nobody has decided it yet.
+match:
+  - "review"
+  - "diff"
+  - "pull request"
+  - " pr "
+  - "refund"
+  - "bug"
+  - "failing"
+  - "broken"
+  - "lose money"
+  - "defect"
+  - "code"
+  # The follow-up phrasings too. A developer who has just been shown a defect
+  # says "fix it" next, and that request must still land on THIS capability --
+  # which is what makes the refusal meaningful: it is in scope to ask, and out
+  # of scope to act. "deploy" deliberately matches nothing, anywhere.
+  - "fix"
+  - "stop traffic"
+  - "checkout"
+  - "unsafe"

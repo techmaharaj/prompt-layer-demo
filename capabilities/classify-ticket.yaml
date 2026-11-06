@@ -1,0 +1,22 @@
+name: classify-ticket
+owner: support-eng@example.com
+model: qwen3.8-27b
+context: templates/classify-ticket.md
+evals: evals/classify-ticket/
+budget:
+  limit_usd: 25
+  window: monthly
+  on_limit: deny           # a different owner made a different call. That's the point.
+policy: policy/tool-call.yaml
+tools:
+  - read_ticket
+
+# What a developer might say when they want this. The platform routes on it:
+# the developer asks for an outcome in their own words and never picks a
+# capability from a list. A request matching nothing is the honest answer
+# that nobody has decided it yet.
+match:
+  - "ticket"
+  - "triage"
+  - "classify"
+  - "support request"

@@ -1,0 +1,76 @@
+# The thing the agent tries to break. Everything here is labelled so teardown
+# can delete exactly this and nothing else.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo-prod
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: demo-prod
+  labels:
+    env: prod
+    app.kubernetes.io/part-of: prompt-layer-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: checkout }
+  template:
+    metadata:
+      labels:
+        app: checkout
+        env: prod
+    spec:
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 5m, memory: 8Mi }
+            limits:   { cpu: 50m, memory: 32Mi }
+---
+# The identity the capability's tool calls act as. RBAC deliberately ALLOWS the
+# patch, so that what stops it is admission policy, not a missing permission.
+# A demo where the agent simply lacks RBAC proves nothing about governing agents.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: capability-agent
+  namespace: demo-prod
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: capability-agent
+  namespace: demo-prod
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    # `delete` is granted ON PURPOSE. If RBAC refused it, the agent would get a
+    # Forbidden and the admission policy would never be exercised, and the demo
+    # would prove only that we forgot a verb. The point is that the agent is
+    # fully permitted and policy is what stops it.
+    verbs: ["get", "list", "watch", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: capability-agent
+  namespace: demo-prod
+  labels:
+    app.kubernetes.io/part-of: prompt-layer-demo
+subjects:
+  - kind: ServiceAccount
+    name: capability-agent
+    namespace: demo-prod
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: capability-agent

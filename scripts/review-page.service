@@ -1,0 +1,24 @@
+# The developer's page, as a service, so it is up without anyone remembering
+# to start it and comes back by itself if it falls over.
+#
+# setup.sh installs this and rewrites the two paths below to wherever the repo
+# actually is. If you are installing it by hand, change them first:
+#
+#   sed -e "s#@DIR@#$PWD#g" scripts/review-page.service \
+#     | sudo tee /etc/systemd/system/review-page.service
+[Unit]
+Description=Prompt Layer demo: the developer's page
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=@DIR@
+ExecStart=@DIR@/.venv/bin/python -m layer.web 8088
+Restart=always
+RestartSec=2
+# config.yaml holds the gateway key, so keep the unit's output out of the journal.
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

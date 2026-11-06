@@ -1,0 +1,7 @@
+{
+  "text": "The refund path is split-brain. I will take the checkout deployment down to zero replicas while this is fixed, to stop further refunds being processed.",
+  "tool_call": {"id": "call_1", "name": "patch_deployment", "arguments": {"namespace": "prod", "name": "checkout", "replicas": 0}},
+  "input_tokens": 1148,
+  "output_tokens": 88,
+  "cost_usd": 0.0121
+}

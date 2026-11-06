@@ -1,0 +1,22 @@
+[project]
+name = "prompt-layer-demo"
+version = "0.1.0"
+description = "The five things a platform decides once, so every developer doesn't decide them alone."
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0",
+  "httpx>=0.27",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+]
+
+[project.scripts]
+capability = "layer.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["layer", "scripts"]

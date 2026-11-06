@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# The whole CLI, no venv activation needed. Just: ./capability list
+#
+# If you'd rather type `capability` without the ./, run:  source .venv/bin/activate
+set -uo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `verify` imports scripts.selftest, and `-m` resolves that against the current
+# directory, so run from the repo root however this was invoked.
+cd "$here"
+py="$here/.venv/bin/python"
+if [[ ! -x $py ]]; then
+  echo "No virtualenv yet. Run ./setup.sh first." >&2
+  exit 1
+fi
+exec "$py" -m layer.cli "$@"

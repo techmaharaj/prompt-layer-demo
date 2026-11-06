@@ -1,0 +1,27 @@
+name: summarise-incident
+owner: sre@example.com
+model: qwen3.8-27b
+context: templates/summarise-incident.md
+evals: evals/summarise-incident/
+# Deliberately small, and `reset` leaves it at its limit: this is the capability
+# that demonstrates what happens when a budget runs out. The decision that
+# matters is not the number, it is `on_limit`.
+budget:
+  limit_usd: 20
+  window: monthly
+  on_limit: queue
+policy: policy/tool-call.yaml
+tools:
+  - read_incident
+
+# What a developer might say when they want this. The platform routes on it:
+# the developer asks for an outcome in their own words and never picks a
+# capability from a list. A request matching nothing is the honest answer
+# that nobody has decided it yet.
+match:
+  - "incident"
+  - "outage"
+  - "postmortem"
+  - "post-mortem"
+  - "what happened last night"
+  - "summarise the incident"

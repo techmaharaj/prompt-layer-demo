@@ -1,0 +1,21 @@
+name: draft-release-notes
+owner: developer-experience@example.com
+model: qwen3.8-27b
+context: templates/draft-release-notes.md
+evals: evals/draft-release-notes/
+budget:
+  limit_usd: 50
+  window: monthly
+  on_limit: queue
+policy: policy/tool-call.yaml
+tools:
+  - read_changelog
+
+# What a developer might say when they want this. The platform routes on it:
+# the developer asks for an outcome in their own words and never picks a
+# capability from a list. A request matching nothing is the honest answer
+# that nobody has decided it yet.
+match:
+  - "release notes"
+  - "changelog"
+  - "what shipped"

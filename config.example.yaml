@@ -1,0 +1,110 @@
+# --------------------------------------------------------------------------
+#  prompt-layer-demo configuration
+#
+#  Copy this file to `config.yaml` and fill it in. `config.yaml` is gitignored
+#  and never committed.
+#
+#      cp config.example.yaml config.yaml
+#
+#  Everything the demo needs is in this one file. Leave `provider.base_url`
+#  empty and the demo runs offline against the canned responses in
+#  fixtures/responses/ and still demonstrates every component.
+# --------------------------------------------------------------------------
+
+provider:
+  # Any OpenAI-compatible endpoint. Must include the version path (usually /v1).
+  #
+  #   LiteLLM proxy      http://<host>:4000/v1    or behind a reverse proxy, https://<host>/v1
+  #   OpenAI             https://api.openai.com/v1
+  #   OpenRouter         https://openrouter.ai/api/v1
+  #   Ollama             http://localhost:11434/v1
+  #   llama.cpp server   http://localhost:8080/v1
+  #   vLLM               http://localhost:8000/v1
+  #
+  base_url: ""
+
+  # The key, two options. Pick ONE and delete the other.
+  #
+  #  a) put it here. This file is gitignored, so it stays local.
+  api_key: ""
+  #
+  #  b) or keep it out of files entirely and name an environment variable:
+  # api_key_env: PROMPT_LAYER_API_KEY
+
+  # Seconds to wait for a completion. A local 27B on one GPU can be slow on a
+  # long diff; raise this if you see timeouts rather than assuming it's broken.
+  timeout: 180
+
+  # Reasoning/thinking models. Measured on a local 27B, 2026-11-04:
+  #   false -> 2.9s, 503 chars   true -> 22.9s, 709 chars (same two defects found)
+  # Off is the default because 23 seconds of a blank page is not an answer. It
+  # is sent as chat_template_kwargs.enable_thinking, which llama.cpp and vLLM
+  # honour and other backends ignore.
+  thinking: false
+
+  # The model /playground offers, which is the only place a model name is a
+  # developer's choice. Left empty, it borrows the first capability's model so
+  # that a fresh clone has something to send without naming it twice.
+  playground_model: ""
+
+# --------------------------------------------------------------------------
+#  Model mapping, the bit that IS the Prompt Layer
+#
+#  A capability in capabilities/*.yaml declares a LOGICAL model name. This maps
+#  that name to whatever your backend actually serves.
+#
+#  That indirection is the whole point: when a supplier retires a model, you
+#  change one line HERE and not one capability file moves. No developer finds
+#  out. Compare before/review.sh, where the model name is baked into a
+#  developer's own script and its retirement breaks their day.
+#
+#  So if your backend does not serve `qwen3.8-27b`, map it below rather than
+#  editing capabilities/*.yaml. Editing the capability files is the habit this
+#  repo is arguing against.
+#
+#  Left empty, the logical name is passed through unchanged.
+# --------------------------------------------------------------------------
+
+models:
+  # logical name (what capabilities/*.yaml asks for) -> what your backend serves
+  qwen3.8-27b: ""
+
+  # Examples:
+  #   qwen3.8-27b: "gpt-4o-mini"                     # OpenAI
+  #   qwen3.8-27b: "anthropic/claude-sonnet-4.5"     # OpenRouter
+  #   qwen3.8-27b: "llama3.1:8b"                     # Ollama
+
+# --------------------------------------------------------------------------
+#  Optional: the cluster-side half
+#
+#  The admission floor is refused at the Kubernetes API, which needs a cluster
+#  with Kyverno installed. Everything lands in the namespace below, and
+#  teardown deletes only that namespace. Change it and you must change it in
+#  policy/admission.yaml and k8s/demo-prod.yaml too, which spell it out.
+# --------------------------------------------------------------------------
+
+cluster:
+  namespace: demo-prod
+  # Both optional, and both passed to every kubectl call this repo makes.
+  # Left empty, your current context is used.
+  kubeconfig: ""
+  context: ""
+  # Not a field: if your kubeconfig is root-only, as with a default k3s, set
+  # the KUBECTL environment variable instead, for example
+  #   KUBECTL="sudo -n k3s kubectl" ./capability verify
+  # Nothing here ever runs sudo without being told to.
+
+observability:
+  # Where spans go. Component 5 is the one that has to be seen, not read.
+  #
+  # Use the address the collector is actually reachable at FROM WHERE THE LAYER
+  # RUNS. If the layer runs on the same box as the cluster, that is the node's
+  # own address and its NodePort, not 127.0.0.1, so the same config still works
+  # when something else calls it later.
+  #   otlp_endpoint: http://<node>:30318      # k8s/jaeger.yaml's fixed NodePort
+  otlp_endpoint: ""
+
+  # The trace UI, as a human opens it. The assistant's refusals link to it, so
+  # give it an address that resolves from the browser you will be using.
+  #   trace_ui: https://jaeger.internal.example.com
+  trace_ui: ""

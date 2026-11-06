@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.DS_Store
+.env
+fixtures/ledger.json
+fixtures/boundary-log.jsonl
+
+# Local-only files: notes and scratch. Never committed.
+*.local.*
+*.local/
+
+# Filled-in config: endpoint, API key, model map. Never committed.
+config.yaml
